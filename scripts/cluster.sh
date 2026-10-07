@@ -54,10 +54,39 @@ cmd_status() {
 
 cmd_rm() { cmd_stop; rm -rf "$DATA_DIR"; echo "Каталог $DATA_DIR очищен"; }
 
+check_node() {
+  [[ -f "$DATA_DIR/pids" ]] || { echo "нет запущенного кластера"; exit 1; }
+  n=$(wc -l <"$DATA_DIR/pids")
+  [[ "$1" =~ ^[0-9]+$ ]] && (($1 < n)) || { echo "нет узла $1: в кластере узлы 0..$((n - 1))"; exit 1; }
+}
+
+cmd_start_node() {
+  local id=$1 n pid
+  check_node "$id"
+  pid=$(sed -n "$((id + 1))p" "$DATA_DIR/pids")
+  if kill -0 "$pid" 2>/dev/null; then echo "узел $id уже запущен (PID $pid)"; exit 1; fi
+
+  "$BIN" -id "$id" -http "127.0.0.1:$((BASE_PORT + id))" -peers "$(peers "$n")" \
+    >>"$DATA_DIR/node$id.log" 2>&1 &
+  pid=$!
+  awk -v l="$((id + 1))" -v p="$pid" 'NR == l { $0 = p } 1' "$DATA_DIR/pids" >"$DATA_DIR/pids.tmp"
+  mv "$DATA_DIR/pids.tmp" "$DATA_DIR/pids"
+  echo "Узел $id запущен (порт $((BASE_PORT + id)), PID $pid)"
+}
+
+cmd_stop_node() {
+  local id=$1 n pid
+  check_node "$id"
+  pid=$(sed -n "$((id + 1))p" "$DATA_DIR/pids")
+  if kill "$pid" 2>/dev/null; then echo "Узел $id остановлен"; else echo "узел $id не запущен"; fi
+}
+
 case "${1:-}" in
   start) shift; cmd_start "${1:-3}" ;;
+  start-node) cmd_start_node "${2:-}" ;;
+  stop-node) cmd_stop_node "${2:-}" ;;
   stop) cmd_stop ;;
   status) cmd_status ;;
   rm) cmd_rm ;;
-  *) echo "Использование: $0 {start [N]|status|stop|rm}"; exit 1 ;;
+  *) echo "Использование: $0 {start [N]|start-node ID|stop-node ID|status|stop|rm}"; exit 1 ;;
 esac
