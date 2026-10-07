@@ -1,0 +1,34 @@
+version: "2"
+
+linters:
+  default: all
+  disable:
+    - depguard
+    - exhaustruct
+    - exhaustruct_v5
+    - gomodguard
+    - noinlineerr
+    - testpackage
+    - varnamelen
+    - wsl
+  exclusions:
+    rules:
+      - linters: [revive]
+        text: "package-comments"
+      - linters: [revive]
+        text: "exported const .* should have comment"
+      - linters: [gosec]
+        text: "G404"
+
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule
+    gofumpt:
+      module-path: raft
