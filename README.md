@@ -27,10 +27,10 @@ go run ./cmd/node -id 0 -http 127.0.0.1:8001 \
 
 ## Клиентский API
 
-| Метод | Путь | Назначение |
-| --- | --- | --- |
-| `GET` | `/status` | роль, терм, текущий лидер, живые пиры |
-| `POST` | `/raft/request-vote` | RPC `RequestVote` между узлами |
+| Метод  | Путь                   | Назначение                                   |
+|--------|------------------------|----------------------------------------------|
+| `GET`  | `/status`              | роль, терм, текущий лидер, живые пиры        |
+| `POST` | `/raft/request-vote`   | RPC `RequestVote` между узлами               |
 | `POST` | `/raft/append-entries` | RPC `AppendEntries` между узлами (heartbeat) |
 
 ```console
