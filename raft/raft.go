@@ -74,18 +74,18 @@ type Node struct {
 	leaderID         int
 	electionDeadline time.Time
 	nextHeartbeat    time.Time
-	peerAlive        map[int]bool
+	peerSeen         map[int]time.Time
 }
 
 // NewNode создает узел в роли follower.
 func NewNode(id int, peers []int, tr Transport) *Node {
 	n := &Node{
-		id:        id,
-		peers:     peers,
-		tr:        tr,
-		votedFor:  -1,
-		leaderID:  -1,
-		peerAlive: map[int]bool{},
+		id:       id,
+		peers:    peers,
+		tr:       tr,
+		votedFor: -1,
+		leaderID: -1,
+		peerSeen: map[int]time.Time{},
 	}
 	n.resetElectionTimer()
 
@@ -166,7 +166,7 @@ func (n *Node) Report() Report {
 	alive := []int{}
 
 	for _, p := range n.peers {
-		if n.peerAlive[p] {
+		if n.alive(p) {
 			alive = append(alive, p)
 		}
 	}
@@ -277,21 +277,31 @@ func (n *Node) resetElectionTimer() {
 	n.electionDeadline = time.Now().Add(minElectionTimeout + rand.N(maxElectionTimeout-minElectionTimeout))
 }
 
-// markPeer отмечает доступность пира, логирует подключение/отключение, возвращает true при успехе RPC.
+// alive сообщает, был ли контакт с пиром за последний maxElectionTimeout.
+func (n *Node) alive(peer int) bool {
+	seen, ok := n.peerSeen[peer]
+
+	return ok && time.Since(seen) < maxElectionTimeout
+}
+
+// markPeer запоминает время контакта с пиром, логирует подключение/отключение, возвращает true при успехе RPC.
 func (n *Node) markPeer(peer int, err error) bool {
-	ok := err == nil
-	if n.peerAlive[peer] == ok {
-		return ok
+	if err != nil {
+		if _, ok := n.peerSeen[peer]; ok {
+			delete(n.peerSeen, peer)
+			n.logf("пир %d недоступен", peer)
+		}
+
+		return false
 	}
 
-	n.peerAlive[peer] = ok
-	if ok {
+	if !n.alive(peer) {
 		n.logf("пир %d подключен", peer)
-	} else {
-		n.logf("пир %d недоступен", peer)
 	}
 
-	return ok
+	n.peerSeen[peer] = time.Now()
+
+	return true
 }
 
 func (n *Node) logf(format string, args ...any) {
