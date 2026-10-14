@@ -17,29 +17,51 @@ peers() {
   echo "${out%,}"
 }
 
+launch() {
+  local id=$1 n=$2 inner cmd
+  inner=$(printf 'echo $$ > %q; exec %q -id %d -http 127.0.0.1:%d -peers %q' \
+    "$DATA_DIR/node$id.pid" "$BIN" "$id" "$((BASE_PORT + id))" "$(peers "$n")")
+  cmd=$(printf 'cd %q && sh -c %q' "$PWD" "$inner")
+  cmd=${cmd//\\/\\\\}
+  cmd=${cmd//\"/\\\"}
+  osascript >/dev/null <<EOF
+tell application "Terminal"
+  set t to do script "$cmd"
+  set custom title of t to "raft: узел $id"
+  activate
+end tell
+EOF
+}
+
+stop_node() {
+  local id=$1 pid
+  pid=$(cat "$DATA_DIR/node$id.pid" 2>/dev/null || true)
+  rm -f "$DATA_DIR/node$id.pid"
+  [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || return 1
+}
+
 cmd_start() {
-  local n=${1:-3} pids=()
+  local n=${1:-3}
   command -v go >/dev/null || { echo "нужен Go в PATH"; exit 1; }
   go build -o "$BIN" ./cmd/node
 
+  echo "$n" >"$DATA_DIR/size"
   for ((i = 0; i < n; i++)); do
-    "$BIN" -id "$i" -http "127.0.0.1:$((BASE_PORT + i))" -peers "$(peers "$n")" \
-      >"$DATA_DIR/node$i.log" 2>&1 &
-    pids+=($!)
+    launch "$i" "$n"
   done
-  printf '%s\n' "${pids[@]}" >"$DATA_DIR/pids"
 
-  echo "Запущено узлов: $n (порты $BASE_PORT..$((BASE_PORT + n - 1)))"
-  echo "PID: ${pids[*]}"
-  echo "Логи: $DATA_DIR/node*.log   Статус: ./scripts/cluster.sh status"
+  echo "Запущено узлов: $n (порты $BASE_PORT..$((BASE_PORT + n - 1))), у каждого свое окно Terminal"
   sleep 2
   "$0" status || true
 }
 
 cmd_stop() {
-  [[ -f "$DATA_DIR/pids" ]] || { echo "нет запущенного кластера"; return; }
-  while read -r pid; do kill "$pid" 2>/dev/null || true; done <"$DATA_DIR/pids"
-  rm -f "$DATA_DIR/pids"
+  local f id
+  for f in "$DATA_DIR"/node*.pid; do
+    [[ -f "$f" ]] || continue
+    id=${f##*/node}
+    stop_node "${id%.pid}" || true
+  done
   echo "Кластер остановлен"
 }
 
@@ -55,30 +77,27 @@ cmd_status() {
 cmd_rm() { cmd_stop; rm -rf "$DATA_DIR"; echo "Каталог $DATA_DIR очищен"; }
 
 check_node() {
-  [[ -f "$DATA_DIR/pids" ]] || { echo "нет запущенного кластера"; exit 1; }
-  n=$(wc -l <"$DATA_DIR/pids")
+  [[ -f "$DATA_DIR/size" ]] || { echo "нет запущенного кластера"; exit 1; }
+  n=$(cat "$DATA_DIR/size")
   [[ "$1" =~ ^[0-9]+$ ]] && (($1 < n)) || { echo "нет узла $1: в кластере узлы 0..$((n - 1))"; exit 1; }
 }
+
+node_pid() { cat "$DATA_DIR/node$1.pid" 2>/dev/null || true; }
 
 cmd_start_node() {
   local id=$1 n pid
   check_node "$id"
-  pid=$(sed -n "$((id + 1))p" "$DATA_DIR/pids")
-  if kill -0 "$pid" 2>/dev/null; then echo "узел $id уже запущен (PID $pid)"; exit 1; fi
+  pid=$(node_pid "$id")
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then echo "узел $id уже запущен (PID $pid)"; exit 1; fi
 
-  "$BIN" -id "$id" -http "127.0.0.1:$((BASE_PORT + id))" -peers "$(peers "$n")" \
-    >>"$DATA_DIR/node$id.log" 2>&1 &
-  pid=$!
-  awk -v l="$((id + 1))" -v p="$pid" 'NR == l { $0 = p } 1' "$DATA_DIR/pids" >"$DATA_DIR/pids.tmp"
-  mv "$DATA_DIR/pids.tmp" "$DATA_DIR/pids"
-  echo "Узел $id запущен (порт $((BASE_PORT + id)), PID $pid)"
+  launch "$id" "$n"
+  echo "Узел $id запущен в новом окне (порт $((BASE_PORT + id)))"
 }
 
 cmd_stop_node() {
-  local id=$1 n pid
+  local id=$1 n
   check_node "$id"
-  pid=$(sed -n "$((id + 1))p" "$DATA_DIR/pids")
-  if kill "$pid" 2>/dev/null; then echo "Узел $id остановлен"; else echo "узел $id не запущен"; fi
+  if stop_node "$id"; then echo "Узел $id остановлен"; else echo "узел $id не запущен"; fi
 }
 
 case "${1:-}" in
