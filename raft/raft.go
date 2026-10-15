@@ -269,10 +269,6 @@ func (n *Node) broadcastAppendEntries() {
 }
 
 func (n *Node) isMajority(votes int) bool {
-	if len(n.peers) == 0 {
-		return false
-	}
-
 	return votes*2 > len(n.peers)+1
 }
 
