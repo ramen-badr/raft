@@ -182,12 +182,12 @@ func (n *Node) Report() Report {
 }
 
 func (n *Node) startElection() {
+	n.logf("таймаут выборов → Candidate")
 	n.state = Candidate
 	n.currentTerm++
 	n.votedFor = n.id
 	n.leaderID = -1
 	n.resetElectionTimer()
-	n.logf("таймаут выборов → Candidate")
 
 	votes := 1
 	if n.isMajority(votes) {
@@ -269,6 +269,10 @@ func (n *Node) broadcastAppendEntries() {
 }
 
 func (n *Node) isMajority(votes int) bool {
+	if len(n.peers) == 0 {
+		return false
+	}
+
 	return votes*2 > len(n.peers)+1
 }
 
