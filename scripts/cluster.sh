@@ -41,16 +41,16 @@ stop_node() {
 }
 
 cmd_start() {
-  local n=${1:-3}
+  local n=${1:-3} cluster=${2:-$n}
   command -v go >/dev/null || { echo "нужен Go в PATH"; exit 1; }
   go build -o "$BIN" ./cmd/node
 
-  echo "$n" >"$DATA_DIR/size"
+  echo "$cluster" >"$DATA_DIR/size"
   for ((i = 0; i < n; i++)); do
-    launch "$i" "$n"
+    launch "$i" "$cluster"
   done
 
-  echo "Запущено узлов: $n (порты $BASE_PORT..$((BASE_PORT + n - 1))), у каждого свое окно Terminal"
+  echo "Запущено узлов: $n (id 0..$((n - 1))), кластер из $cluster, порты $BASE_PORT..$((BASE_PORT + cluster - 1)), у каждого свое окно Terminal"
   sleep 2
   "$0" status || true
 }
@@ -78,34 +78,37 @@ cmd_rm() { cmd_stop; rm -rf "$DATA_DIR"; echo "Каталог $DATA_DIR очищ
 
 check_node() {
   [[ -f "$DATA_DIR/size" ]] || { echo "нет запущенного кластера"; exit 1; }
-  n=$(cat "$DATA_DIR/size")
-  [[ "$1" =~ ^[0-9]+$ ]] && (($1 < n)) || { echo "нет узла $1: в кластере узлы 0..$((n - 1))"; exit 1; }
+  local cluster
+  read -r cluster <"$DATA_DIR/size"
+  [[ "$1" =~ ^[0-9]+$ ]] && (($1 < cluster)) ||
+    { echo "нет узла $1: в кластере из $cluster узлы 0..$((cluster - 1))"; exit 1; }
 }
 
 node_pid() { cat "$DATA_DIR/node$1.pid" 2>/dev/null || true; }
 
 cmd_start_node() {
-  local id=$1 n pid
+  local id=$1 pid cluster
   check_node "$id"
+  read -r cluster <"$DATA_DIR/size"
   pid=$(node_pid "$id")
   if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then echo "узел $id уже запущен (PID $pid)"; exit 1; fi
 
-  launch "$id" "$n"
+  launch "$id" "$cluster"
   echo "Узел $id запущен в новом окне (порт $((BASE_PORT + id)))"
 }
 
 cmd_stop_node() {
-  local id=$1 n
+  local id=$1
   check_node "$id"
   if stop_node "$id"; then echo "Узел $id остановлен"; else echo "узел $id не запущен"; fi
 }
 
 case "${1:-}" in
-  start) shift; cmd_start "${1:-3}" ;;
+  start) shift; cmd_start "${1:-3}" "${2:-}" ;;
   start-node) cmd_start_node "${2:-}" ;;
   stop-node) cmd_stop_node "${2:-}" ;;
   stop) cmd_stop ;;
   status) cmd_status ;;
   rm) cmd_rm ;;
-  *) echo "Использование: $0 {start [N]|start-node ID|stop-node ID|status|stop|rm}"; exit 1 ;;
+  *) echo "Использование: $0 {start [N] [CLUSTER]|start-node ID|stop-node ID|status|stop|rm}"; exit 1 ;;
 esac

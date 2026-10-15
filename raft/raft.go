@@ -182,12 +182,12 @@ func (n *Node) Report() Report {
 }
 
 func (n *Node) startElection() {
-	n.logf("таймаут выборов → Candidate")
 	n.state = Candidate
 	n.currentTerm++
 	n.votedFor = n.id
 	n.leaderID = -1
 	n.resetElectionTimer()
+	n.logf("таймаут выборов → Candidate")
 
 	votes := 1
 	if n.isMajority(votes) {
@@ -293,14 +293,9 @@ func (n *Node) markPeer(peer int, err error) bool {
 	if err != nil {
 		if _, ok := n.peerSeen[peer]; ok {
 			delete(n.peerSeen, peer)
-			n.logf("пир %d недоступен", peer)
 		}
 
 		return false
-	}
-
-	if !n.alive(peer) {
-		n.logf("пир %d подключен", peer)
 	}
 
 	n.peerSeen[peer] = time.Now()

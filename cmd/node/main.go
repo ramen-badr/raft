@@ -50,7 +50,7 @@ func main() {
 
 	go node.Run()
 
-	log.Printf("[узел %d] слушаю %s, пиры: %v", *id, *httpAddr, peers)
+	log.Printf("[узел %d][term 0] слушаю %s, пиры: %v", *id, *httpAddr, peers)
 
 	srv := &http.Server{
 		Addr:              *httpAddr,
